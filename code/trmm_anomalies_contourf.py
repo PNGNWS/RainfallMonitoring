@@ -195,6 +195,9 @@ lag = 2
 
 trmm_date = today - timedelta(days=lag)
 
+# loads the virtual stations file
+Virtual_Stations = pd.read_excel('../data/PNG_stations_subset.xls')
+
 for ndays in [30, 60, 90]:
 
     realtime = pd.date_range(start=trmm_date - timedelta(days=ndays-1), end=trmm_date)
@@ -246,17 +249,9 @@ for ndays in [30, 60, 90]:
 
     # ### plots the long term climatology
 
-    # In[170]:
-
     title = 'Normal rainfall amounts (2000-2014) for the last {} days [{:%d %B} to {:%d %B}]\nsource: TRMM / TMPA-RT 3B42RT Rainfall estimates'.format(ndays, realtime[0],realtime[-1])
 
-
-    # In[171]:
-
     vmin, vmax, step = get_limits(realtime_sum['clim'])
-
-
-    # In[172]:
 
     f = plot_map(m, realtime_sum['clim'], title=title, units="mm", draw_cities=True,              cmap=plt.get_cmap('BuGn'), extend='max')
 
@@ -294,3 +289,64 @@ for ndays in [30, 60, 90]:
     f = plot_map(m, anomsp, title=title, units='percent. point anomalies (%)', draw_cities=True, cmap=cmap_anoms, extend='both')
 
     f.savefig('../images/last{}days_maskocean_anoms_pp.png'.format(ndays), dpi=200)
+
+    for i, row in Virtual_Stations.iterrows():
+        stn_name = row['Stn Name']
+        lat_V = row['Latitude']
+        lon_V = row['Longitude']
+
+
+        clim_ts = dset_clim.sel(latitude=lat_V, longitude=lon_V, method='nearest')['hrf']
+        realtime_ts = dset_realtime.sel(lat=lat_V, lon=lon_V, method='nearest')['trmm']
+        df_ts = realtime_ts.to_dataframe()[['trmm']]
+        df_ts.loc[:,'clim'] = clim_ts.data
+        df_ts.columns = ['observed','climatology']
+
+
+        f = plt.figure(figsize=(12,5))
+        ax1 = f.add_axes([0.1,0.25,0.7,0.65])
+
+        ax1.plot(df_ts['climatology'].index, df_ts['climatology'], color='g', label='clim.')
+        ax1.plot(df_ts['observed'].index, df_ts['observed'], color='b', label='obs.')
+
+        ax1.fill_between(df_ts['climatology'].index, 0, df_ts['climatology'], color='g', alpha=0.6, label='clim.')
+        ax1.fill_between(df_ts['observed'].index, 0, df_ts['observed'], color='b', alpha=0.6, label='obs.')
+
+        [l.set_rotation(90) for l in ax1.xaxis.get_ticklabels()]
+        [l.set_fontsize(12) for l in ax1.xaxis.get_ticklabels()]
+        [l.set_fontsize(12) for l in ax1.yaxis.get_ticklabels()]
+
+        ax1.legend(fontsize=12, loc=2)
+
+        ax1.set_xticks(df_ts['climatology'].index[np.arange(1,len(df_ts-5), 5)])
+
+        ax1.set_ylabel("mm", fontsize=12)
+        ax1.grid('on')
+
+        ax1.set_title('TRMM / TMPA_RT rainfall estimates for the last {} days to {:%d %B %Y}\nVirtual Station {}: LAT: {}, LON: {}'\
+                     .format(ndays, trmm_date, stn_name, realtime_ts.lat.data, realtime_ts.lon.data), fontsize=12)
+
+        # calculates the sum
+
+        sums = df_ts.sum()
+
+        # plots the cumulative rainfall as barplots
+
+        ax2 = f.add_axes([0.8,0.25,0.14,0.65])
+        ax2.bar(np.arange(0.5,2.5), sums.values, width=0.7, color=['b','g'], alpha=0.6, align='center')
+        ax2.set_xticks([0.5, 1.5])
+        ax2.set_xticklabels(['obs.', 'clim.'], fontsize=12)
+        ax2.yaxis.tick_right()
+        ax2.set_ylabel("mm", fontsize=12)
+        ax2.yaxis.set_label_position("right")
+        # ax2.set_yticks(None)
+        ax2.set_title("{:4.1f} % of normal".format(np.divide(*sums.values) * 100), fontdict={'weight':'bold'})
+        [l.set_fontsize(12) for l in ax2.yaxis.get_ticklabels()]
+
+        stn_name_f = stn_name.replace(" ","_")
+
+        df_ts.to_csv('../outputs/Virtual_Station_{}_{}ndays.csv'.format(stn_name_f, ndays))
+
+        f.savefig('../images/Virtual_Station_{}_{}ndays.png'.format(stn_name_f, ndays), dpi=100)
+
+        plt.close(f)
