@@ -191,7 +191,7 @@ m = bm(projection='cyl', llcrnrlon=domain['lonmin']+0.25,\
 # get the date of today (UTC)
 today = datetime.utcnow()
 
-lag = 1
+lag = 2
 
 trmm_date = today - timedelta(days=lag)
 
