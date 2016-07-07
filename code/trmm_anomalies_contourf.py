@@ -1,4 +1,4 @@
-#!/Users/nicolasf/anaconda3/bin/python
+#!/Users/nicolasf/anaconda/anaconda/bin/python
 import sys
 
 from matplotlib import pyplot as plt
@@ -7,7 +7,13 @@ from mpl_toolkits.basemap import maskoceans, interp
 
 import numpy as np
 import pandas as pd
-import xray
+
+try:
+    # if xarray is installed
+    import xarray as xray
+    # import xray (renamed to xarray from version 0.7)
+except:
+    import xray
 from datetime import datetime, timedelta
 from glob import glob
 import palettable
@@ -16,7 +22,7 @@ import warnings
 warnings.simplefilter(action = "ignore", category = FutureWarning)
 
 dpath = '/Users/nicolasf/data/TRMM/daily/'
-climpath = '/Users/nicolasf/data/TRMM/climatology/daily/'
+climpath = '/Users/nicolasf/data/TRMM/climatology/daily/2001_2015/'
 
 # ### gets the cmap
 cmap_anoms = palettable.colorbrewer.diverging.BrBG_11.mpl_colormap
@@ -126,7 +132,7 @@ def plot_map(m, Dataarray, vmin=None, vmax=None, step=None, title="", units="", 
         interp_array_m = interp_array
     # make contour plot (ocean values will be masked)
 
-    f, ax = plt.subplots(figsize=(20,20 * np.divide(*interp_array_m.shape)))
+    f, ax = plt.subplots(figsize=(20,int(20 * np.divide(*interp_array_m.shape))))
     f.subplots_adjust(left=0.1)
 
     m.ax = ax
@@ -195,6 +201,8 @@ lag = 2
 
 trmm_date = today - timedelta(days=lag)
 
+print("processing up to {:%Y-%m-%d}\n".format(trmm_date))
+
 # loads the virtual stations file
 Virtual_Stations = pd.read_excel('../data/PNG_stations_subset.xls')
 
@@ -208,7 +216,6 @@ for ndays in [30, 60, 90]:
     for d in realtime:
         fname  = dpath + "3B42RT_daily.{}.nc".format(d.strftime("%Y.%m.%d"))
         lfiles.append(fname)
-
 
     dset_realtime = read_netcdfs(lfiles, 'time')
 
@@ -225,7 +232,8 @@ for ndays in [30, 60, 90]:
 
 
     # ### selects the domain
-    dset_clim = dset_clim.sel(latitude=slice(domain['latmin'], domain['latmax']), longitude=slice(domain['lonmin'], domain['lonmax']))
+    #dset_clim = dset_clim.sel(latitude=slice(domain['latmin'], domain['latmax']), longitude=slice(domain['lonmin'], domain['lonmax']))
+    dset_clim = dset_clim.sel(lat=slice(domain['latmin'], domain['latmax']), lon=slice(domain['lonmin'], domain['lonmax']))
 
 
     # ### calculates the averages and cumulative rainfall
@@ -235,8 +243,11 @@ for ndays in [30, 60, 90]:
     realtime_ave = dset_realtime.mean('time')
     realtime_sum = dset_realtime.sum('time')
 
-    realtime_ave['clim'] = (['lat','lon'], clim_ave['hrf'].data)
-    realtime_sum['clim'] = (['lat','lon'], clim_sum['hrf'].data)
+    # realtime_ave['clim'] = (['lat','lon'], clim_ave['hrf'].data)
+    # realtime_sum['clim'] = (['lat','lon'], clim_sum['hrf'].data)
+
+    realtime_ave['clim'] = (['lat','lon'], clim_ave['trmm'].data)
+    realtime_sum['clim'] = (['lat','lon'], clim_sum['trmm'].data)
 
     # ### calculates the anomalies
     raw = realtime_sum['trmm']
@@ -253,7 +264,7 @@ for ndays in [30, 60, 90]:
 
     vmin, vmax, step = get_limits(realtime_sum['clim'])
 
-    f = plot_map(m, realtime_sum['clim'], title=title, units="mm", draw_cities=True,              cmap=plt.get_cmap('BuGn'), extend='max')
+    f = plot_map(m, realtime_sum['clim'], title=title, units="mm", draw_cities=True, cmap=plt.get_cmap('BuGn'), extend='both')
 
     f.savefig('../images/realtime_maskocean_CLIM_{}.png'.format(ndays), dpi=200)
 
@@ -261,7 +272,7 @@ for ndays in [30, 60, 90]:
 
     title = 'Observed rainfall amounts for the last {} days [{:%d %B %Y} to {:%d %B %Y}]\nsource: TRMM / TMPA-RT 3B42RT Rainfall estimates'.format(ndays, realtime[0],realtime[-1])
 
-    f = plot_map(m, raw, vmin=vmin, vmax=vmax, step=step, title=title, units='mm', draw_cities=True,              cmap=plt.get_cmap('BuGn'), extend='both')
+    f = plot_map(m, raw, vmin=vmin, vmax=vmax, step=step, title=title, units='mm', draw_cities=True, cmap=plt.get_cmap('BuGn'), extend='both')
 
     f.savefig('../images/realtime_maskocean_OBS_{}.png'.format(ndays), dpi=200)
 
@@ -296,7 +307,8 @@ for ndays in [30, 60, 90]:
         lon_V = row['Longitude']
 
 
-        clim_ts = dset_clim.sel(latitude=lat_V, longitude=lon_V, method='nearest')['hrf']
+        #clim_ts = dset_clim.sel(latitude=lat_V, longitude=lon_V, method='nearest')['hrf']
+        clim_ts = dset_clim.sel(lat=lat_V, lon=lon_V, method='nearest')['trmm']
         realtime_ts = dset_realtime.sel(lat=lat_V, lon=lon_V, method='nearest')['trmm']
         df_ts = realtime_ts.to_dataframe()[['trmm']]
         df_ts.loc[:,'clim'] = clim_ts.data
@@ -306,11 +318,11 @@ for ndays in [30, 60, 90]:
         f = plt.figure(figsize=(12,5))
         ax1 = f.add_axes([0.1,0.25,0.7,0.65])
 
-        ax1.plot(df_ts['climatology'].index, df_ts['climatology'], color='g', label='clim.')
-        ax1.plot(df_ts['observed'].index, df_ts['observed'], color='b', label='obs.')
+        ax1.plot(df_ts['climatology'].index, df_ts['climatology'], color='g', label="")
+        ax1.plot(df_ts['observed'].index, df_ts['observed'], color='b', label="")
 
-        ax1.fill_between(df_ts['climatology'].index, 0, df_ts['climatology'], color='g', alpha=0.6, label='clim.')
-        ax1.fill_between(df_ts['observed'].index, 0, df_ts['observed'], color='b', alpha=0.6, label='obs.')
+        ax1.fill_between(df_ts['climatology'].index, 0, df_ts['climatology'], color='g', alpha=0.6, label='climatology (TRMM/TMPA)')
+        ax1.fill_between(df_ts['observed'].index, 0, df_ts['observed'], color='b', alpha=0.6, label='estimated (TRMM/TMPA)')
 
         [l.set_rotation(90) for l in ax1.xaxis.get_ticklabels()]
         [l.set_fontsize(12) for l in ax1.xaxis.get_ticklabels()]
